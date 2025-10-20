@@ -7,24 +7,40 @@
 
   outputs = { self, nixpkgs }:
     let
-      pkgs = import nixpkgs { system = "x86_64-linux"; };
+      systems = [ "x86_64-linux" "aarch64-darwin" ];
+      forAllSystems = nixpkgs.lib.genAttrs systems;
+      packages = forAllSystems (system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+          package = pkgs.stdenv.mkDerivation {
+            pname = "upto";
+            version = "0.1.0";
+            src = ./.;
+
+            dontBuild = true;
+            installPhase = ''
+              install -Dm755 ${./upto.sh} $out/bin/upto
+            '';
+          };
+        in {
+          default = package;
+        });
+      packageFor = system: packages.${system}.default;
     in {
-      packages.x86_64-linux.default = pkgs.stdenv.mkDerivation {
-        pname = "upto";
-        version = "0.1.0";
-        src = ./.;
+      packages = packages;
 
-        installPhase = ''
-          mkdir -p $out/bin
-          cp upto $out/bin/upto
-          chmod +x $out/bin/upto
-        '';
-      };
+      defaultPackage = forAllSystems (system: packageFor system);
 
-      apps.x86_64-linux.default = {
+      apps = forAllSystems (system: {
+        default = {
+          type = "app";
+          program = "${packageFor system}/bin/upto";
+        };
+      });
+
+      defaultApp = forAllSystems (system: {
         type = "app";
-        program = "${self.packages.x86_64-linux.default}/bin/upto";
-      };
+        program = "${packageFor system}/bin/upto";
+      });
     };
 }
-
